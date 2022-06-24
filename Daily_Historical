@@ -1,0 +1,36 @@
+import pandas as pd
+import time
+from pycoingecko import CoinGeckoAPI
+cg = CoinGeckoAPI()
+
+coins = cg.get_coins_markets(vs_currency="usd", page = 1)
+
+ids = []
+ids = [item['id'] for item in coins]
+
+data = {}
+counter =  0
+timePeriod = 500
+for coin in ids:
+    counter += 1
+    if counter > 35:
+        time.sleep(60)
+        counter = 0    
+    nested_lists = cg.get_coin_market_chart_by_id( id=coin, vs_currency="usd", days=timePeriod)["prices"]
+    data[coin] = {}
+    data[coin]["timestamps"], data[coin]["values"] = zip(*nested_lists)
+
+frame_list = [ pd.DataFrame(data[coin]["values"], index=data[coin]["timestamps"], columns=[coin]) for coin in ids if coin in data ]
+
+coins_df = pd.concat(frame_list, axis=1)
+coins_df["datetime"] = pd.to_datetime(coins_df.index, unit="ms")
+coins_df["date"] = coins_df["datetime"].dt.date
+coins_df["hour"] = coins_df["datetime"].dt.hour
+coins_df = coins_df.melt(id_vars=["datetime", "date", "hour"], var_name="currency_name", )
+
+
+coins_df = coins_df[["date", "currency_name", "value"]]
+coins_df = coins_df.dropna()
+coins_df["currency_name"]= coins_df["currency_name"].str.replace('-', '_')
+coins_df = coins_df.drop_duplicates(subset=['date', 'currency_name'], keep='first')
+coins_df = coins_df.set_index('currency_name')
